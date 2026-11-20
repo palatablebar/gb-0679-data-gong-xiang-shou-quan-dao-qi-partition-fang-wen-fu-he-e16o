@@ -26,13 +26,15 @@
 | TRAP-14 | 重复键冲突 | 后写覆盖 | 保留首条并隔离冲突行 | `app/modules/m1_accesses/rules.py` | `tests/test_m1.py::test_duplicate_conflict_real_sample` |
 | TRAP-18 | 空态三态 | 一律成功 | 分别错误码 | `app/modules/m1_accesses/rules.py` | `tests/test_m1.py::test_three_empty_states` |
 | TRAP-26 | 旧版本提交 | 覆盖新结果 | 版本条件更新 | `app/store.py` | `tests/test_e2e.py::test_stale_review_409` |
+| TRAP-27 | 换编码/换列序重发 | 按字节建批导致计数重复 | 规范化内容指纹归并同内容批次，每次送达另存原文件 | `app/receipt.py`,`app/pipeline.py` | `tests/test_receipts.py` |
+| TRAP-28 | 失败送达污染批次 | 失败也建批或覆盖旧版 | 失败只登记失败接收记录，批次与版本不动，原文件可追回 | `app/pipeline.py`,`app/store.py` | `tests/test_receipts.py::test_failed_delivery_preserves_old_batch_and_keeps_raw` |
 | TRAP-07 | 上游结果空值 | 误报拒绝 | 隔离缺失 | `app/values.py` | `tests/test_m3.py::test_real_missing_decision_not_zero` |
 | TRAP-19 | 允许与拒绝重叠 | 后写覆盖 | 拒绝优先且排序证据 | `app/modules/m4_conflicts/rules.py` | `tests/test_m4.py::test_deny_priority_counterexample` |
 | TRAP-23 | 授权到期点 | 多放行一次 | 半开生效窗 | `app/modules/m3_grants/rules.py` | `tests/test_m3.py::test_expiry_endpoint_excluded` |
 
 ## 对账规则
 
-输入原始逻辑行=最终采纳来源行+隔离来源行+重复行+空白行+分段表头。派生记录用_sources保存完整来源，因此分组不丢行。业务预期合计与上游申报合计之差等于逐行差异之和。结果按输入摘要、规则版本及参数产生唯一批次，事务写入；同源重跑只复用已有批次。
+输入原始逻辑行=最终采纳来源行+隔离来源行+重复行+空白行+分段表头。派生记录用_sources保存完整来源，因此分组不丢行。业务预期合计与上游申报合计之差等于逐行差异之和。结果按规范化内容指纹（与编码、列顺序无关）、参数及规则版本产生唯一批次，事务写入；同内容重发只复用已有批次并新增一条接收记录（receipt），原文件逐份留存可追回，计数不重复；访问值真变化才另立批次。判定失败的送达不建批、不改旧版，原件以失败接收记录留存。
 
 ## 已知不覆盖
 

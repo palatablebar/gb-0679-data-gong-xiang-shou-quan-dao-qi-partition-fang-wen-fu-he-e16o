@@ -1,5 +1,5 @@
-from flask import Flask,jsonify,request,send_from_directory
-from app.config import ROOT,DATA_DIR,MODULES
+from flask import Flask,jsonify,request
+from app.config import MODULES
 from app.errors import DomainError
 from app import pipeline,store
 from app.web import register_pages
@@ -25,12 +25,12 @@ def create_app():
         if not isinstance(params,dict): raise DomainError("BAD_PARAMETERS","参数需要对象")
         raw=payload.get("csv")
         if raw is not None and not isinstance(raw,str): raise DomainError("BAD_CSV","CSV需要文本")
-        return pipeline.execute(raw.encode() if raw is not None else pipeline.load_sample(payload.get("sample","dirty.csv")),params)
+        return pipeline.execute(raw.encode() if raw is not None else pipeline.load_sample(payload.get("sample","dirty.csv")),params,origin="api:"+("csv" if raw is not None else "sample:"+str(payload.get("sample","dirty.csv"))))
     @application.post("/api/upload")
     def upload():
         file=request.files.get("file")
         if not file: raise DomainError("NO_FILE","请选择CSV文件")
-        return pipeline.execute(file.read())
+        return pipeline.execute(file.read(),origin="upload:"+file.filename)
     @application.get("/api/runs")
     def history(): return {"runs":store.history()}
     @application.get("/api/runs/<run_id>")
@@ -45,6 +45,17 @@ def create_app():
         from app.archive import build_archive
         run=store.get(run_id)
         return application.response_class(build_archive(run),mimetype="text/csv",headers={"Content-Disposition":'attachment; filename="evidence.csv"'})
+    @application.get("/api/receipts")
+    def receipts():
+        run_id=request.args.get("run_id")
+        return {"receipts":store.list_receipts(run_id)}
+    @application.get("/api/receipts/<receipt_id>")
+    def receipt_detail(receipt_id): return store.get_receipt(receipt_id)
+    @application.get("/api/receipts/<receipt_id>/raw")
+    def receipt_raw(receipt_id):
+        receipt=store.get_receipt(receipt_id)
+        mime="text/csv"
+        return application.response_class(receipt["raw"],mimetype=mime,headers={"Content-Disposition":'attachment; filename="%s.csv"'%receipt_id})
     for index,(slug,title) in enumerate(MODULES,1):
         module=importlib.import_module(f"app.modules.m{index}_{slug}.handler")
         application.register_blueprint(module.bp)
